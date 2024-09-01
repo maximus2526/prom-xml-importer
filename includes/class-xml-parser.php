@@ -10,12 +10,16 @@ class XML_Parser {
     }
 
     public function update_products_stock_status() {
+        error_log('Функція update_products_stock_status починається.');
+
         $xml_data = $this->fetch_xml_data();
 
         if (!$xml_data) {
             error_log('Не вдалося отримати XML дані.');
             return;
         }
+
+        error_log('XML дані отримані. Початок парсингу.');
 
         try {
             $products = new SimpleXMLElement($xml_data);
@@ -41,30 +45,32 @@ class XML_Parser {
                 error_log("Товар з ID {$product_id} не знайдено за SKU.");
             }
         }
+
+        error_log('Функція update_products_stock_status завершена.');
     }
 
     private function fetch_xml_data() {
-        $response = wp_remote_get($this->xml_url, array('timeout' => 300));
-        // error_log(var_export($response, true));
-        if (is_wp_error($response)) {
-            error_log('Помилка під час завантаження XML: ' . $response->get_error_message());
-            return false;
-        }
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $this->xml_url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 600); // Тайм-аут
+        $body = curl_exec($ch);
+        $status_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
     
-        $status_code = wp_remote_retrieve_response_code($response);
         if ($status_code !== 200) {
             error_log('Помилка: сервер повернув код ' . $status_code);
             return false;
         }
-
-        $body = wp_remote_retrieve_body($response);
+    
+        error_log('Довжина отриманого тіла: ' . strlen($body));
         if (empty($body)) {
             error_log('Помилка: XML порожній або не був отриманий.');
             return false;
         }
-
+    
         return $body;
-    }
+    }    
 
     private function find_product_by_sku($sku) {
         $args = [

@@ -84,7 +84,7 @@ function prom_xml_importer_interval_render() {
     $interval = get_option('prom_xml_update_interval', 'hourly');
     ?>
     <select name="prom_xml_update_interval">
-        <option value="5_minute" <?php selected($interval, '5_minute'); ?>>Щохвилини</option>
+        <option value="5_minute" <?php selected($interval, '5_minute'); ?>>Що 5 хв</option>
         <option value="hourly" <?php selected($interval, 'hourly'); ?>>Щогодини</option>
         <option value="twicedaily" <?php selected($interval, 'twicedaily'); ?>>Двічі на день</option>
         <option value="daily" <?php selected($interval, 'daily'); ?>>Щодня</option>
@@ -103,12 +103,10 @@ function prom_xml_importer_handle_action() {
     if (isset($_POST['run_script'])) {
         $xml_url = get_option('prom_xml_url', '');
 
-        // if ($xml_url) {
-        //     $xml_parser = new XML_Parser($xml_url);
-        //     $xml_parser->update_products_stock_status();
-        // }
-
-        
+        if ($xml_url) {
+            $xml_parser = new XML_Parser($xml_url);
+            $xml_parser->update_products_stock_status();
+        }
 
         if (!wp_next_scheduled('prom_update_stock_cron')) {
             Cron_Job::deactivate();
