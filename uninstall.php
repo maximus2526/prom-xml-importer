@@ -1,11 +1,9 @@
 <?php
 // Забороняємо прямий доступ
-defined('WP_UNINSTALL_PLUGIN') || exit;
+defined('ABSPATH') || exit;
 
-// Видалення опцій плагіна
-delete_option('prom_xml_url');
-delete_option('prom_xml_update_interval');
-
-// Очистка планувальника
-wp_clear_scheduled_hook('prom_xml_import_event');
-?>
+// Видалення CRON завдань при видаленні плагіна
+register_uninstall_hook(__FILE__, 'prom_uninstall_cleanup');
+function prom_uninstall_cleanup() {
+    wp_clear_scheduled_hook('prom_update_stock_event');
+}

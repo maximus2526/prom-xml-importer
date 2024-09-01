@@ -1,32 +1,64 @@
 <?php
-// Забороняємо прямий доступ
+
 defined('ABSPATH') || exit;
 
-class Prom_XML_Cron_Job {
+class Cron_Job {
+    const CRON_HOOK = 'prom_update_stock_cron';
 
-    const HOOK_NAME = 'prom_xml_import_event';
-
-    // Активація планувальника
     public static function activate() {
-        if (!wp_next_scheduled(self::HOOK_NAME)) {
-            wp_schedule_event(time(), 'hourly', self::HOOK_NAME); // Стандартний інтервал - щогодини
+        $interval = get_option('prom_xml_update_interval', 'hourly');
+        if (!wp_next_scheduled(self::CRON_HOOK)) {
+            wp_schedule_event(time(), $interval, self::CRON_HOOK);
+            add_action(self::CRON_HOOK, [__CLASS__, 'update_stock']);
         }
     }
 
-    // Деактивація планувальника
     public static function deactivate() {
-        wp_clear_scheduled_hook(self::HOOK_NAME);
+        wp_clear_scheduled_hook(self::CRON_HOOK);
     }
 
-    // Імпорт товарів
-    public static function import_products() {
+    public static function add_custom_cron_schedule($schedules) {
+        $schedules['5_minute'] = array(
+            'interval' => 300,
+            'display'  => __('Every 5 Minutes')
+        );
+
+        if (!isset($schedules['hourly'])) {
+            $schedules['hourly'] = array(
+                'interval' => 3600,
+                'display'  => __('Every Hour')
+            );
+        }
+
+        if (!isset($schedules['twicedaily'])) {
+            $schedules['twicedaily'] = array(
+                'interval' => 43200,
+                'display'  => __('Twice Daily')
+            );
+        }
+
+        if (!isset($schedules['daily'])) {
+            $schedules['daily'] = array(
+                'interval' => 86400,
+                'display'  => __('Once Daily')
+            );
+        }
+
+        return $schedules;
+    }
+
+    public static function update_stock() {
+        error_log('CRON подія починається');
         $xml_url = get_option('prom_xml_url', '');
-        if (!empty($xml_url)) {
-            Prom_XML_Parser::parse_and_update($xml_url);
+        if ($xml_url) {
+            error_log('XML URL: ' . $xml_url);
+            $parser = new XML_Parser($xml_url);
+            $parser->update_products_stock_status();
+            error_log('XML парсинг завершено');
+        } else {
+            error_log('XML URL не встановлено');
         }
     }
 }
 
-// Додавання імпорту на планувальник
-add_action(Prom_XML_Cron_Job::HOOK_NAME, ['Prom_XML_Cron_Job', 'import_products']);
-?>
+add_filter('cron_schedules', ['Cron_Job', 'add_custom_cron_schedule']);

@@ -1,12 +1,10 @@
 <?php
-// Забороняємо прямий доступ
 defined('ABSPATH') || exit;
 
-// Додавання меню налаштувань у адмінці
 add_action('admin_menu', 'prom_xml_importer_add_admin_menu');
 
 function prom_xml_importer_add_admin_menu() {
-    add_options_page(
+    add_menu_page(
         'Prom XML Importer Settings',
         'Prom XML Importer',
         'manage_options',
@@ -15,7 +13,6 @@ function prom_xml_importer_add_admin_menu() {
     );
 }
 
-// Відображення сторінки налаштувань
 function prom_xml_importer_settings_page() {
     ?>
     <div class="wrap">
@@ -24,24 +21,34 @@ function prom_xml_importer_settings_page() {
             <?php
             settings_fields('prom_xml_importer_settings');
             do_settings_sections('prom-xml-importer');
-            submit_button();
             ?>
+            <?php submit_button('Save Settings'); ?>
         </form>
+        <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+            <?php
+            // Додаємо nonce для захисту
+            wp_nonce_field('prom_xml_importer_action', 'prom_xml_importer_nonce');
+            ?>
+            <input type="hidden" name="action" value="prom_xml_importer_action">
+            <input type="submit" name="run_script" class="button button-primary" value="Run Auto stock status" style="margin-right: 10px;">
+            <input type="submit" name="prom_xml_importer_stop" class="button button-secondary" value="Stop Cron Jobs">
+        </form>
+        <?php
+        // Обробка повідомлень
+        if (isset($_GET['settings-updated']) && $_GET['settings-updated']) {
+            echo '<div class="updated"><p>Settings saved.</p></div>';
+        }
+        ?>
     </div>
     <?php
 }
 
-// Реєстрація налаштувань
 add_action('admin_init', 'prom_xml_importer_settings_init');
 
 function prom_xml_importer_settings_init() {
-    // Реєстрація опції для URL XML
     register_setting('prom_xml_importer_settings', 'prom_xml_url');
-
-    // Реєстрація опції для інтервалу оновлення
     register_setting('prom_xml_importer_settings', 'prom_xml_update_interval');
 
-    // Додавання секції налаштувань
     add_settings_section(
         'prom_xml_importer_section',
         'Основні налаштування',
@@ -49,7 +56,6 @@ function prom_xml_importer_settings_init() {
         'prom-xml-importer'
     );
 
-    // Поле для введення URL
     add_settings_field(
         'prom_xml_url',
         'URL XML файлу',
@@ -58,7 +64,6 @@ function prom_xml_importer_settings_init() {
         'prom_xml_importer_section'
     );
 
-    // Поле для вибору інтервалу
     add_settings_field(
         'prom_xml_update_interval',
         'Інтервал оновлення',
@@ -68,7 +73,6 @@ function prom_xml_importer_settings_init() {
     );
 }
 
-// Вивід поля для URL
 function prom_xml_importer_url_render() {
     $url = get_option('prom_xml_url', '');
     ?>
@@ -76,15 +80,51 @@ function prom_xml_importer_url_render() {
     <?php
 }
 
-// Вивід поля для інтервалу
 function prom_xml_importer_interval_render() {
     $interval = get_option('prom_xml_update_interval', 'hourly');
     ?>
     <select name="prom_xml_update_interval">
+        <option value="5_minute" <?php selected($interval, '5_minute'); ?>>Щохвилини</option>
         <option value="hourly" <?php selected($interval, 'hourly'); ?>>Щогодини</option>
         <option value="twicedaily" <?php selected($interval, 'twicedaily'); ?>>Двічі на день</option>
         <option value="daily" <?php selected($interval, 'daily'); ?>>Щодня</option>
     </select>
     <?php
 }
-?>
+
+// Обробка запиту для запуску скрипту та зупинки CRON завдань
+add_action('admin_post_prom_xml_importer_action', 'prom_xml_importer_handle_action');
+
+function prom_xml_importer_handle_action() {
+    if (!isset($_POST['prom_xml_importer_nonce']) || !wp_verify_nonce($_POST['prom_xml_importer_nonce'], 'prom_xml_importer_action')) {
+        wp_die('Nonce verification failed');
+    }
+
+    if (isset($_POST['run_script'])) {
+        $xml_url = get_option('prom_xml_url', '');
+
+        // if ($xml_url) {
+        //     $xml_parser = new XML_Parser($xml_url);
+        //     $xml_parser->update_products_stock_status();
+        // }
+
+        
+
+        if (!wp_next_scheduled('prom_update_stock_cron')) {
+            Cron_Job::deactivate();
+            Cron_Job::activate();
+        }
+
+        add_settings_error('prom_xml_importer_settings', 'settings_updated', 'Script run successfully.', 'updated');
+    }
+
+    if (isset($_POST['prom_xml_importer_stop'])) {
+        wp_clear_scheduled_hook('prom_update_stock_cron');
+        add_settings_error('prom_xml_importer_settings', 'settings_updated', 'Cron jobs stopped.', 'updated');
+    }
+
+    wp_redirect(add_query_arg('settings-updated', 'true', wp_get_referer()));
+    exit;
+}
+
+
