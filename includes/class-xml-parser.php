@@ -33,23 +33,28 @@ class XML_Parser {
 			return;
 		}
 
-		$total_offers         = 0;
-		$updated_in_stock     = 0;
-		$updated_out_of_stock = 0;
-		$not_found            = 0;
-
+		$updates = array();
 		foreach ( $products->shop->offers->offer as $offer ) {
 			$sku               = (string) $offer['id'];
 			$quantity_in_stock = (string) $offer->quantity_in_stock;
 
 			$stock_status = ! empty( $quantity_in_stock ) && (int) $quantity_in_stock > 0 ? 'instock' : 'outofstock';
 
-			$wc_product = $this->find_product_by_sku( $sku );
+			$updates[ $sku ] = $stock_status;
+		}
 
-			if ( $wc_product ) {
-				$wc_product->set_stock_status( $stock_status );
-				$wc_product->save();
-				wc_delete_product_transients( $wc_product->get_id() );
+		$total_offers         = count( $updates );
+		$updated_in_stock     = 0;
+		$updated_out_of_stock = 0;
+		$not_found            = 0;
+
+		foreach ( $updates as $sku => $stock_status ) {
+			$product = $this->find_product_by_sku( $sku );
+
+			if ( $product ) {
+				$product->set_stock_status( $stock_status );
+				$product->save();
+				wc_delete_product_transients( $product->get_id() );
 
 				if ( $stock_status === 'instock' ) {
 					++$updated_in_stock;
@@ -59,8 +64,6 @@ class XML_Parser {
 			} else {
 				++$not_found;
 			}
-
-			++$total_offers;
 		}
 
 		error_log( "Всього товарів знайдено: {$total_offers}" );
