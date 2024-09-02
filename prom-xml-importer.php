@@ -6,12 +6,12 @@
  * Author: KMax
  */
 
-defined('ABSPATH') || exit;
+defined( 'ABSPATH' ) || exit;
 
-require_once plugin_dir_path(__FILE__) . 'includes/class-cron-job.php';
-require_once plugin_dir_path(__FILE__) . 'includes/class-xml-parser.php';
-require_once plugin_dir_path(__FILE__) . 'includes/functions.php';
-require_once plugin_dir_path(__FILE__) . 'admin/settings-page.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/class-cron-job.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/class-xml-parser.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/functions.php';
+require_once plugin_dir_path( __FILE__ ) . 'admin/settings-page.php';
 
-register_deactivation_hook(__FILE__, ['Cron_Job', 'deactivate']);
-add_action(Cron_Job::CRON_HOOK, ['Cron_Job', 'update_stock']);
+register_deactivation_hook( __FILE__, array( 'Cron_Job', 'deactivate' ) );
+add_action( Cron_Job::CRON_HOOK, array( 'Cron_Job', 'update_stock' ) );
