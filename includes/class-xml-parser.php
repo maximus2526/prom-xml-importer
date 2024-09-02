@@ -14,7 +14,6 @@ class XML_Parser {
 	}
 
 	public function update_products_stock_status() {
-		error_log( 'XML парсинг починається' );
 		$xml_data = $this->fetch_xml_data();
 
 		if ( ! $xml_data ) {
@@ -37,9 +36,9 @@ class XML_Parser {
 		foreach ( $products->shop->offers->offer as $offer ) {
 			$sku               = (string) $offer['id'];
 			$quantity_in_stock = (string) $offer->quantity_in_stock;
+			$stock_status      = ! empty( $quantity_in_stock ) && (int) $quantity_in_stock > 0 ? 'instock' : 'outofstock';
 
-			$stock_status = ! empty( $quantity_in_stock ) && (int) $quantity_in_stock > 0 ? 'instock' : 'outofstock';
-
+			// Зберігати сток статус для кожного SKU
 			$updates[ $sku ] = $stock_status;
 		}
 
@@ -49,30 +48,49 @@ class XML_Parser {
 		$not_found            = 0;
 
 		foreach ( $updates as $sku => $stock_status ) {
-			$product = $this->find_product_by_sku( $sku );
+			// Спочатку шукаємо продукт за SKU
+			$product_id = $this->find_product_id_by_sku( $sku );
 
-			if ( $product ) {
-				$product->set_stock_status( $stock_status );
-				$product->save();
-				wc_delete_product_transients( $product->get_id() );
+			if ( $product_id ) {
+				$product = wc_get_product( $product_id );
+				if ( $product ) {
+					if ( $product->get_type() === 'variable' ) {
+						// Варіативний продукт: знайти всі варіації
+						$variations = $product->get_children(); // отримати всі варіації
+						foreach ( $variations as $variation_id ) {
+							$variation = wc_get_product( $variation_id );
+							if ( $variation ) {
+								$variation->set_stock_status( $stock_status );
+								$variation->save();
+								wc_delete_product_transients( $variation->get_id() );
+							}
+						}
+					} else {
+						// Простий продукт
+						$product->set_stock_status( $stock_status );
+						$product->save();
+						wc_delete_product_transients( $product->get_id() );
 
-				if ( $stock_status === 'instock' ) {
-					++$updated_in_stock;
+						if ( $stock_status === 'instock' ) {
+							++$updated_in_stock;
+						} else {
+							++$updated_out_of_stock;
+						}
+					}
 				} else {
-					++$updated_out_of_stock;
+					++$not_found;
 				}
 			} else {
 				++$not_found;
 			}
 		}
 
-		error_log( "Всього товарів знайдено: {$total_offers}" );
-		error_log( "Товарів оновлено до статусу 'в наявності': {$updated_in_stock}" );
-		error_log( "Товарів оновлено до статусу 'не в наявності': {$updated_out_of_stock}" );
-		error_log( "Товарів не знайдено: {$not_found}" );
-		error_log( 'XML парсинг завершено' );
+		$message = "Всього товарів знайдено: {$total_offers}\n" .
+					"Товарів оновлено до статусу 'в наявності': {$updated_in_stock}\n" .
+					"Товарів оновлено до статусу 'не в наявності': {$updated_out_of_stock}\n" .
+					"Товарів не знайдено: {$not_found}";
 
-		$this->send_telegram_message( "Всього товарів знайдено: {$total_offers}\nТоварів оновлено до статусу 'в наявності': {$updated_in_stock}\nТоварів оновлено до статусу 'не в наявності': {$updated_out_of_stock}\nТоварів не знайдено: {$not_found}" );
+		$this->send_telegram_message( $message );
 	}
 
 	private function fetch_xml_data() {
@@ -85,29 +103,32 @@ class XML_Parser {
 		curl_close( $ch );
 
 		if ( $status_code !== 200 ) {
-			error_log( 'Помилка: сервер повернув код ' . $status_code );
 			return false;
 		}
 
 		return $body;
 	}
 
-	private function find_product_by_sku( $sku ) {
-		$args = array(
-			'post_type'  => 'product',
-			'meta_query' => array(
-				array(
-					'key'     => '_sku',
-					'value'   => $sku,
-					'compare' => '=',
-				),
-			),
+	private function find_product_id_by_sku( $sku ) {
+		global $wpdb;
+
+		// Запит для пошуку продуктів за SKU
+		$sql = $wpdb->prepare(
+			"
+            SELECT p.ID
+            FROM {$wpdb->posts} p
+            INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
+            WHERE p.post_type IN ('product', 'product_variation')
+            AND pm.meta_key = '_sku'
+            AND pm.meta_value = %s
+        ",
+			$sku
 		);
 
-		$query = new WP_Query( $args );
+		$product_ids = $wpdb->get_col( $sql );
 
-		if ( $query->have_posts() ) {
-			return wc_get_product( $query->posts[0]->ID );
+		if ( ! empty( $product_ids ) ) {
+			return $product_ids[0]; // Повертаємо перший знайдений продукт або варіацію
 		}
 
 		return false;
