@@ -48,15 +48,10 @@ class Cron_Job {
     }
 
     public static function update_stock() {
-        error_log('CRON подія починається');
         $xml_url = get_option('prom_xml_url', '');
         if ($xml_url) {
-            error_log('XML URL: ' . $xml_url);
             $parser = new XML_Parser($xml_url);
             $parser->update_products_stock_status();
-            error_log('XML парсинг завершено');
-        } else {
-            error_log('XML URL не встановлено');
         }
     }
 }

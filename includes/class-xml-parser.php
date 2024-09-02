@@ -10,67 +10,78 @@ class XML_Parser {
     }
 
     public function update_products_stock_status() {
-        error_log('Функція update_products_stock_status починається.');
-
+        error_log('XML парсинг починається');
         $xml_data = $this->fetch_xml_data();
 
         if (!$xml_data) {
-            error_log('Не вдалося отримати XML дані.');
+            error_log('Не вдалося отримати XML дані');
             return;
         }
 
-        error_log('XML дані отримані. Початок парсингу.');
-
         try {
             $products = new SimpleXMLElement($xml_data);
+            if (empty($products)) {
+                error_log('XML дані порожні або не були створені');
+                return;
+            }
         } catch (Exception $e) {
             error_log('Помилка парсингу XML: ' . $e->getMessage());
             return;
         }
 
-        foreach ($products->product as $product) {
-            $product_id = (string)$product->id;
-            $quantity_in_stock = (string)$product->quantity_in_stock;
+        $total_offers = 0;
+        $updated_in_stock = 0;
+        $updated_out_of_stock = 0;
+        $not_found = 0;
 
-            $wc_product = $this->find_product_by_sku($product_id);
+        foreach ($products->shop->offers->offer as $offer) {
+            $sku = (string)$offer['id'];
+            $quantity_in_stock = (string)$offer->quantity_in_stock;
+
+            $stock_status = !empty($quantity_in_stock) && (int)$quantity_in_stock > 0 ? 'instock' : 'outofstock';
+
+            $wc_product = $this->find_product_by_sku($sku);
 
             if ($wc_product) {
-                $stock_status = !empty($quantity_in_stock) ? 'instock' : 'outofstock';
-
                 $wc_product->set_stock_status($stock_status);
                 $wc_product->save();
+                wc_delete_product_transients($wc_product->get_id());
 
-                error_log("Товар SKU {$wc_product->get_sku()} оновлений до статусу: {$stock_status}");
+                if ($stock_status === 'instock') {
+                    $updated_in_stock++;
+                } else {
+                    $updated_out_of_stock++;
+                }
             } else {
-                error_log("Товар з ID {$product_id} не знайдено за SKU.");
+                $not_found++;
             }
+
+            $total_offers++;
         }
 
-        error_log('Функція update_products_stock_status завершена.');
+        error_log("Всього товарів знайдено: {$total_offers}");
+        error_log("Товарів оновлено до статусу 'в наявності': {$updated_in_stock}");
+        error_log("Товарів оновлено до статусу 'не в наявності': {$updated_out_of_stock}");
+        error_log("Товарів не знайдено: {$not_found}");
+        error_log('XML парсинг завершено');
     }
 
     private function fetch_xml_data() {
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $this->xml_url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 600); // Тайм-аут
+        curl_setopt($ch, CURLOPT_TIMEOUT, 600);
         $body = curl_exec($ch);
         $status_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
-    
+
         if ($status_code !== 200) {
             error_log('Помилка: сервер повернув код ' . $status_code);
             return false;
         }
-    
-        error_log('Довжина отриманого тіла: ' . strlen($body));
-        if (empty($body)) {
-            error_log('Помилка: XML порожній або не був отриманий.');
-            return false;
-        }
-    
+
         return $body;
-    }    
+    }
 
     private function find_product_by_sku($sku) {
         $args = [

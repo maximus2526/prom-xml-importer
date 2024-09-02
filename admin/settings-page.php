@@ -1,4 +1,5 @@
 <?php
+
 defined('ABSPATH') || exit;
 
 add_action('admin_menu', 'prom_xml_importer_add_admin_menu');
@@ -26,7 +27,6 @@ function prom_xml_importer_settings_page() {
         </form>
         <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
             <?php
-            // Додаємо nonce для захисту
             wp_nonce_field('prom_xml_importer_action', 'prom_xml_importer_nonce');
             ?>
             <input type="hidden" name="action" value="prom_xml_importer_action">
@@ -34,7 +34,6 @@ function prom_xml_importer_settings_page() {
             <input type="submit" name="prom_xml_importer_stop" class="button button-secondary" value="Stop Cron Jobs">
         </form>
         <?php
-        // Обробка повідомлень
         if (isset($_GET['settings-updated']) && $_GET['settings-updated']) {
             echo '<div class="updated"><p>Settings saved.</p></div>';
         }
@@ -92,7 +91,6 @@ function prom_xml_importer_interval_render() {
     <?php
 }
 
-// Обробка запиту для запуску скрипту та зупинки CRON завдань
 add_action('admin_post_prom_xml_importer_action', 'prom_xml_importer_handle_action');
 
 function prom_xml_importer_handle_action() {
@@ -124,5 +122,3 @@ function prom_xml_importer_handle_action() {
     wp_redirect(add_query_arg('settings-updated', 'true', wp_get_referer()));
     exit;
 }
-
-
